@@ -30,6 +30,13 @@ function cleanExit ()
 }
 trap cleanExit EXIT
 
+while read input
+do
+	ciop-log "INFO" "I have this input: $input"
+done
+
+exit 0
+
 # path and master/slave variable definition
 UUID=`uuidgen`
 UUIDTMP="/tmp/${UUID}"
