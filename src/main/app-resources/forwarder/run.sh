@@ -30,14 +30,22 @@ function cleanExit ()
 }
 trap cleanExit EXIT
 
-ciop-log "INFO" "trying browseresults with CIOP_WF_RUN_ID=${CIOP_WF_RUN_ID} and node_pf"
+UUIDTMP="/tmp/`uuidgen`"
+mkdir ${UUIDTMP}
 
-for myresult in `/usr/bin/ciop-browseresults -r ${CIOP_WF_RUN_ID} -j node_pf -w`
+/usr/bin/ciop-browseresults -r ${CIOP_WF_RUN_ID} -j node_pf_master -w | tr -d '\r' > ${UUIDTMP}/pf.master
+/usr/bin/ciop-browseresults -r ${CIOP_WF_RUN_ID} -j node_pf_slave -w | tr -d '\r' > ${UUIDTMP}/pf.slave
+
+# let's merge the results
+for myresult in `cat ${UUIDTMP}/pf.slave`
 do
-	ciop-log "INFO" "forwarding $myresult"
-	ciop-log "INFO" "lines $( echo "$myresult" | wc -l )"
-	myresult=`ciop-copy -O /tmp/ "$( echo "$myresult" | tr -d '\n' )"`
-	ciop-publish -s $myresult
+	ciop-log "INFO" "merging $myresult with master"
+	echo "$( cat ${UUIDTMP}/pf.master | tr -d '\n' )|${myresult}" > ${UUIDTMP}/pf.merge
 done
+
+# publishing results
+cat ${UUIDTMP}/pf.merge | ciop-publish -s
+
+rm -rf ${UUIDTMP}
 
 exit 0

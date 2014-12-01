@@ -1,58 +1,65 @@
 <?xml version="1.0" encoding="us-ascii"?>
 <application xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" id="adore">
-  <jobTemplates>
-    <jobTemplate id="pf" jobType="wps_client">
-	<defaultJobconf>
-	  <property id="ogc.wps.access.point">http://10.16.10.43:8080/wps/WebProcessingService</property>
-	  <property id="ogc.wps.process.identifier">com.terradue.wps_oozie.process.OozieAbstractAlgorithm</property>
-	  <property id="ogc.wps.storeExecuteResponse">true</property>
-	  <property id="ogc.wps.status">true</property>
-	  <property id="mapred.task.timeout">9900000000</property>
-	</defaultJobconf>
-    </jobTemplate>
-    <jobTemplate id="forwarder">
-       <streamingExecutable>/application/forwarder/run.sh</streamingExecutable>
-       <defaultJobconf>
-        <property id="ciop.job.max.tasks">1</property>
-        <property id="mapred.task.timeout">9900000000</property>
-      </defaultJobconf>
-    </jobTemplate>
-    <jobTemplate id="adore">
-      <streamingExecutable>/application/adore/run.sh</streamingExecutable>
-      <defaultParameters>
-	<parameter id="adore_project" title="Adore Project" abstract="Define the ADORE project name (e.g. LAquila)" scope="runtime" />
-	<parameter id="adore_master" title="Adore Master" abstract="Define the master ASAR product to use with ADORE" scope="runtime" />
-      </defaultParameters>
-      <defaultJobconf>
-	<property id="ciop.job.max.tasks">1</property>
-	<property id="mapred.task.timeout">9900000000</property>
-      </defaultJobconf>
-    </jobTemplate>
-  </jobTemplates>
-  <workflow id="adore_wf" title="ADORE on a sandbox" abstract="This application uses ADORE using ENVISAT ASAR data">
-    <workflowVersion>1.0</workflowVersion>
-    <node id="node_pf">
-    	<job id="pf"/>
-    	<sources>
-    		<source scope="runtime" id="query_string" title="ASAR slave url" abstract="Define the slave ASAR Level 0 product to use with ADORE" refid="string:list">http://catalogue.terradue.int/catalogue/search/ASA_IM__0P/ASA_IM__0CNPDE20090412_092426_000000162078_00079_37207_1556.N1/rdf,http://catalogue.terradue.int/catalogue/search/ASA_IM__0P/ASA_IM__0CNPAM20080427_092430_000000172068_00079_32197_3368.N1/rdf</source>
-    	</sources>
-    	<parameters/>
-    </node>
-    <node id="node_forwarder">
-      <job id="forwarder"/>
-      <sources>
-        <source refid="wf:node">node_pf</source>
-      </sources>
-    </node>
-    <node id="node_adore">
-      <job id="adore"/>
-      <sources>
-      	<source refid="wf:node">node_forwarder</source>
-      </sources>
-      <parameters>
-      	<parameter id="adore_project">LAquila</parameter>
-      	<parameter id="adore_master">pippo</parameter>
-      </parameters>
-    </node>
-  </workflow>
+	<jobTemplates>
+		<jobTemplate id="pf" jobType="wps_client">
+			<defaultJobconf>
+				<property id="ogc.wps.access.point">http://10.16.10.43:8080/wps/WebProcessingService</property>
+				<property id="ogc.wps.process.identifier">com.terradue.wps_oozie.process.OozieAbstractAlgorithm</property>
+				<property id="ogc.wps.storeExecuteResponse">true</property>
+				<property id="ogc.wps.status">true</property>
+				<property id="mapred.task.timeout">9900000000</property>
+			</defaultJobconf>
+		</jobTemplate>
+		<jobTemplate id="forwarder">
+			<streamingExecutable>/application/forwarder/run.sh</streamingExecutable>
+			<defaultJobconf>
+				<property id="ciop.job.max.tasks">1</property>
+				<property id="mapred.task.timeout">9900000000</property>
+			</defaultJobconf>
+		</jobTemplate>
+		<jobTemplate id="adore">
+			<streamingExecutable>/application/adore/run.sh</streamingExecutable>
+			<defaultParameters>
+				<parameter id="adore_project" title="Adore Project" abstract="Define the ADORE project name (e.g. LAquila)" scope="runtime"/>
+				<parameter id="adore_master" title="Adore Master" abstract="Define the master ASAR product to use with ADORE" scope="runtime"/>
+			</defaultParameters>
+			<defaultJobconf>
+				<property id="ciop.job.max.tasks">1</property>
+				<property id="mapred.task.timeout">9900000000</property>
+			</defaultJobconf>
+		</jobTemplate>
+	</jobTemplates>
+	<workflow id="adore_wf" title="ADORE on a sandbox" abstract="This application uses ADORE using ENVISAT ASAR data">
+		<workflowVersion>1.0</workflowVersion>
+		<node id="node_pf_master">
+			<job id="pf"/>
+			<sources>
+				<source scope="runtime" id="query_string" title="ASAR master url" abstract="Define the slave ASAR Level 0 product to use with ADORE" refid="string:list">http://catalogue.terradue.int/catalogue/search/ASA_IM__0P/ASA_IM__0CNPAM20080427_092430_000000172068_00079_32197_3368.N1/rdf</source>
+			</sources>
+			<parameters/>
+		</node>
+		<node id="node_pf_slave">
+			<job id="pf"/>
+			<sources>
+				<source scope="runtime" id="query_string" title="ASAR slave url" abstract="Define the slave ASAR Level 0 product to use with ADORE" refid="string:list">http://catalogue.terradue.int/catalogue/search/ASA_IM__0P/ASA_IM__0CNPDE20090412_092426_000000162078_00079_37207_1556.N1/rdf</source>
+			</sources>
+			<parameters/>
+		</node>
+		<node id="node_forwarder">
+			<job id="forwarder"/>
+			<sources>
+				<source refid="wf:node">node_pf_master</source>
+				<source refid="wf:node">node_pf_slave</source>
+			</sources>
+		</node>
+		<node id="node_adore">
+			<job id="adore"/>
+			<sources>
+				<source refid="wf:node">node_forwarder</source>
+			</sources>
+			<parameters>
+				<parameter id="adore_project">LAquila</parameter>
+			</parameters>
+		</node>
+	</workflow>
 </application>

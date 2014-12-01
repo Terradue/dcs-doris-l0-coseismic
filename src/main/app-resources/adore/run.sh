@@ -30,63 +30,70 @@ function cleanExit ()
 }
 trap cleanExit EXIT
 
-while read input
-do
-	ciop-log "INFO" "I have this input: $input"
-done
-
-exit 0
-
 # path and master/slave variable definition
 UUID=`uuidgen`
 UUIDTMP="/tmp/${UUID}"
 
-MASTER="`ciop-getparam adore_master`"
-PROJECT="`ciop-getparam adore_project`"
+myinput=`cat`
 
-# let's check if the correct product was provided
-[ "`basename ${MASTER} | cut -c 1-10`" != "ASA_IMS_1P" ] && exit $ERR_WRONGPROD
+PROJECT="`ciop-getparam adore_project`"
 
 # creates the adore directory structure
 ciop-log "INFO" "creating the directory structure"
 mkdir -p ${UUIDTMP}
 mkdir ${UUIDTMP}/data
 mkdir ${UUIDTMP}/data/master
-mkdir ${UUIDTMP}/data/slave
 
 ciop-log "INFO" "basedir is ${UUIDTMP}"
 
 # copies the ODR files
-ciop-log "INFO" "copying the ODR files"
-tar xvfz /application/adore/files/ODR.tgz -C ${UUIDTMP}
+[ ! -e /tmp/ODR ] && {
+	ciop-log "INFO" "copying the ODR files"
+	tar xvfz /application/adore/files/ODR.tgz -C /tmp &> /dev/null
+}
+
+# copies the master
+MASTER=`echo "$myinput" | cut -d "|" -f 1`
+SLAVE=`echo "$myinput" | cut -d "|" -f 2`
 
 # retrieves the files
 ciop-log "INFO" "retrieving master [$MASTER]"
 cd ${UUIDTMP}/data/
 
-# copies the master
 ciop-log "INFO" "downloading master [${MASTER}]"
 MASTER=`ciop-copy -f -O ${UUIDTMP}/data/master ${MASTER}`
 res=$?
-
-#retrieving the slave
-SLAVE="`cat`"
+[ $res -ne 0 ] && exit $ERR_CURL
 
 # let's check if the correct product was provided
-[ "`basename ${MASTER} | cut -c 1-10`" != "ASA_IMS_1P" ] && exit $ERR_WRONGPROD
+[ "`head -10 ${MASTER} | grep "^PRODUCT" | tr -d '"' | cut -d "=" -f 2 | cut -c 1-10`" != "ASA_IMS_1P" ] && exit $ERR_WRONGPROD
 
 # check cardinality
 [ "`echo "${SLAVE}" | wc -l`" != "1" ] && exit $ERR_CARDINALITY 
 
 ciop-log "INFO" "retrieving slave [${SLAVE}]"
-SLAVE=`ciop-copy -f -O ${UUIDTMP}/data/slave ${SLAVE}`
+SLAVE=`ciop-copy -f -O /tmp/ ${SLAVE}`
+res=$?
+[ $res -ne 0 ] && exit $ERR_CURL
+
+# let's check if the correct product was provided
+[ "`head -10 ${SLAVE} | grep "^PRODUCT" | tr -d '"' | cut -d "=" -f 2 | cut -c 1-10`" != "ASA_IMS_1P" ] && exit $ERR_WRONGPROD
+
+SLAVE_ID=`head -10 ${SLAVE} | grep "^PRODUCT" | tr -d '"' | cut -d "=" -f 2 | cut -c 15-22`
+
+#we can now create the slave dir and move the file to the right place
+mkdir ${UUIDTMP}/data/${SLAVE_ID}
+
+mv ${SLAVE} ${UUIDTMP}/data/${SLAVE_ID}/
+SLAVE=${UUIDTMP}/data/${SLAVE_ID}/`basename ${SLAVE}`
 
 # setting the adore settings.set file
 cat > ${UUIDTMP}/settings.set <<EOF
 projectFolder="${UUIDTMP}"
 runName="${PROJECT}"
-slave="slave"
-scenes_include=( master slave )
+master="master"
+slave="${SLAVE_ID}"
+scenes_include=( master ${SLAVE_ID} )
 dataFile="ASA_*.N1"
 m_in_dat="${MASTER}"
 s_in_dat="${SLAVE}"
@@ -102,13 +109,15 @@ EOF
 # ready to lauch adore
 cd ${UUIDTMP}
 export ADORESCR=/opt/adore/scr; export PATH=${PATH}:${ADORESCR}:/usr/local/bin
-adore -u settings.set "m_readfiles; settings apply -r m_orbdir=${UUIDTMP}/ODR; m_porbits; s_readfiles; s_porbits; m_crop; s_crop; coarseorb; dem make SRTM3 50 LAquila; s raster_format; settings apply -r raster_format=png; raster a m_crop -- -M1/5; raster a s_crop -- -M1/5; m_simamp; m_timing; coarsecorr; fine; reltiming; demassist; coregpm; resample; interfero; comprefpha; subtrrefpha; comprefdem; subtrrefdem; coherence; raster p subtrrefdem -- -M4/4; raster p subtrrefpha -- -M4/4; raster p interfero -- -M4/4; raster p coherence -- -M4/4 -cgray -b"
+adore -u settings.set "m_readfiles; s_readfiles; settings apply -r m_orbdir=/tmp/ODR; m_porbits; s_porbits; m_crop; s_crop; coarseorb; dem make SRTM3 50 LAquila; settings apply -r raster_format=png; raster a m_crop -- -M1/5; raster a s_crop -- -M1/5; m_simamp; m_timing; coarsecorr; fine; reltiming; demassist; coregpm; resample; interfero; comprefpha; subtrrefpha; comprefdem; subtrrefdem; coherence; raster p subtrrefdem -- -M4/4; raster p subtrrefpha -- -M4/4; raster p interfero -- -M4/4; raster p coherence -- -M4/4 -cgray -b" &> /dev/stdout
+#unwrap; slant2h; geocode;
+#; saveas gdal p interfero -of GTiff master_${SLAVE_ID}.tiff" &> /dev/stdout
 
 # removes unneeded files
 cd ${UUIDTMP}
 rm -rf *.res *.hgt *.drs *.temp *.ps *.DEM
 ciop-publish -m ${UUIDTMP}/*.*
 
-rm -rf ${UUIDTMP}
+#rm -rf ${UUIDTMP}
 
 ciop-log "INFO" "That's all folks"
