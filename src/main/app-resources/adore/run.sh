@@ -35,6 +35,8 @@ UUID=`uuidgen`
 UUIDTMP="/tmp/${UUID}"
 
 myinput=`cat`
+MASTER="`echo $myinput | cut -d "|" -f 1`"
+SLAVE="`echo $myinput | cut -d "|" -f 2`"
 
 PROJECT="`ciop-getparam adore_project`"
 
@@ -52,14 +54,11 @@ ciop-log "INFO" "basedir is ${UUIDTMP}"
 	tar xvfz /application/adore/files/ODR.tgz -C /tmp &> /dev/null
 }
 
-# copies the master
-MASTER=`echo "$myinput" | cut -d "|" -f 1`
-SLAVE=`echo "$myinput" | cut -d "|" -f 2`
-
 # retrieves the files
 ciop-log "INFO" "retrieving master [$MASTER]"
 cd ${UUIDTMP}/data/
 
+# copies the master
 ciop-log "INFO" "downloading master [${MASTER}]"
 MASTER=`ciop-copy -f -O ${UUIDTMP}/data/master ${MASTER}`
 res=$?
@@ -67,9 +66,6 @@ res=$?
 
 # let's check if the correct product was provided
 [ "`head -10 ${MASTER} | grep "^PRODUCT" | tr -d '"' | cut -d "=" -f 2 | cut -c 1-10`" != "ASA_IMS_1P" ] && exit $ERR_WRONGPROD
-
-# check cardinality
-[ "`echo "${SLAVE}" | wc -l`" != "1" ] && exit $ERR_CARDINALITY 
 
 ciop-log "INFO" "retrieving slave [${SLAVE}]"
 SLAVE=`ciop-copy -f -O /tmp/ ${SLAVE}`
@@ -107,17 +103,19 @@ s_in_null="dummy"
 EOF
 
 # ready to lauch adore
+ciop-log "INFO" "launching ADORE"
+
 cd ${UUIDTMP}
 export ADORESCR=/opt/adore/scr; export PATH=${PATH}:${ADORESCR}:/usr/local/bin
-adore -u settings.set "m_readfiles; s_readfiles; settings apply -r m_orbdir=/tmp/ODR; m_porbits; s_porbits; m_crop; s_crop; coarseorb; dem make SRTM3 50 LAquila; settings apply -r raster_format=png; raster a m_crop -- -M1/5; raster a s_crop -- -M1/5; m_simamp; m_timing; coarsecorr; fine; reltiming; demassist; coregpm; resample; interfero; comprefpha; subtrrefpha; comprefdem; subtrrefdem; coherence; raster p subtrrefdem -- -M4/4; raster p subtrrefpha -- -M4/4; raster p interfero -- -M4/4; raster p coherence -- -M4/4 -cgray -b" &> /dev/stdout
-#unwrap; slant2h; geocode;
-#; saveas gdal p interfero -of GTiff master_${SLAVE_ID}.tiff" &> /dev/stdout
+adore -u settings.set "m_readfiles; s_readfiles; settings apply -r m_orbdir=/tmp/ODR; m_porbits; s_porbits; m_crop; s_crop; coarseorb; dem make SRTM3 50 LAquila; settings apply -r raster_format=png; raster a m_crop -- -M1/5; raster a s_crop -- -M1/5; m_simamp; m_timing; coarsecorr; fine; reltiming; demassist; coregpm; resample; interfero; comprefpha; subtrrefpha; comprefdem; subtrrefdem; coherence; unwrap; slant2h; geocode; raster p subtrrefdem -- -M4/4; raster p subtrrefpha -- -M4/4; raster p interfero -- -M4/4; raster p coherence -- -M4/4 -cgray -b; saveas gdal p subtrrefdem -of GTiff master_${SLAVE_ID}_srd.tiff; saveas gdal p subtrrefpha -of GTiff master_${SLAVE_ID}_srp.tiff; saveas gdal p interfero -of GTiff master_${SLAVE_ID}_cint.tiff; saveas gdal p coherence -of GTiff master_${SLAVE_ID}_coh.tiff" &> /dev/stdout
+
+ciop-log "INFO" "ADORE succesfully completed. Publishing results"
 
 # removes unneeded files
 cd ${UUIDTMP}
-rm -rf *.res *.hgt *.drs *.temp *.ps *.DEM
-ciop-publish -m ${UUIDTMP}/*.*
+ciop-publish -m ${UUIDTMP}/*.png
+ciop-publish -m ${UUIDTMP}/*.tiff
 
-#rm -rf ${UUIDTMP}
+rm -rf ${UUIDTMP}
 
 ciop-log "INFO" "That's all folks"
